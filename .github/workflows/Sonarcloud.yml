@@ -15,7 +15,7 @@
 name: SonarCloud
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - development
       - master
@@ -30,7 +30,17 @@ jobs:
     runs-on: ubuntu-18.04
 
     steps:
-      - uses: actions/checkout@v1
+      - name: Get PR number
+        if: github.event_name == 'pull_request_target'
+        run: echo PR_NUMBER=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH") >> $GITHUB_ENV
+      - name: Checkout branch for PR activation
+        if: github.event_name == 'pull_request_target'
+        uses: actions/checkout@v2
+          ref: refs/pull/${{ env.PR_NUMBER}}/merge
+      - name: Checkout branch for push activation
+        if: github.event_name == 'push'
+        uses: actions/checkout@v2
+        
       - name: Get version
         run: echo "VERSION=$(node -e "console.log(require('./clients/vscode-hlasmplugin/package.json').version)")" >> $GITHUB_ENV
       - name: Requirements install
@@ -65,10 +75,10 @@ jobs:
       - name: Generate lcov coverage
         run: cd build/bin && llvm-cov-8 show -instr-profile hlasm_profile library_test -object server_test > coverage.txt
       - name: Pull request setting
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request_target'
         run: |
-          echo PR_NUMBER=-Dsonar.pullrequest.key=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH") >> $GITHUB_ENV
-          echo HEAD_BRANCH=-Dsonar.pullrequest.branch=${{ github.head_ref }} >> $GITHUB_ENV
+          echo PR_NUMBER_ARG=-Dsonar.pullrequest.key=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH") >> $GITHUB_ENV
+          echo HEAD_BRANCH_ARG=-Dsonar.pullrequest.branch=${{ github.head_ref }} >> $GITHUB_ENV
       - name: Sonar scan
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -99,5 +109,5 @@ jobs:
           -Dsonar.exclusions=clients/vscode-hlasmplugin/src/test/**
           -Dsonar.test.inclusions=clients/vscode-hlasmplugin/src/test/**
           -Dsonar.coverage.exclusions=benchmark/benchmark.cpp
-          ${{ env.HEAD_BRANCH }}
-          ${{ env.PR_NUMBER }}
+          ${{ env.HEAD_BRANCH_ARG }}
+          ${{ env.PR_NUMBER_ARG }}
